@@ -14,6 +14,7 @@ readme = "README.md"
 authors = ["Albert Hui <albert.hui@gmail.com>"]
 keywords = ["forensics", "parsing", "bytes", "no-panic"]
 categories = ["parsing", "no-std"]
+exclude = ["fuzz/", ".github/", "docs/", "mkdocs.yml", "deny.toml", "renovate.json", ".pre-commit-config.yaml"]
 
 [dependencies]
 

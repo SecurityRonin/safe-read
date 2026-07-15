@@ -1,0 +1,18 @@
+site_name: safe-read
+site_url: https://securityronin.github.io/safe-read/
+repo_url: https://github.com/SecurityRonin/safe-read
+repo_name: SecurityRonin/safe-read
+theme:
+  name: material
+  features: [content.code.copy, navigation.top, search.highlight]
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - tables
+  - toc: { permalink: true }
+nav:
+  - Home: index.md
+  - Privacy Policy: privacy.md
+  - Terms of Service: terms.md
+plugins: [search]

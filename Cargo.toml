@@ -1,0 +1,21 @@
+[package]
+name = "safe-read"
+version = "0.1.0"
+edition = "2021"
+# Low MSRV: a leaf byte-reading crate with no features to gate. A deliberate,
+# CI-verified floor so every fleet reader can depend on it without raising theirs.
+rust-version = "1.75"
+license = "Apache-2.0"
+description = "Panic-free bounded integer readers over untrusted byte slices — the shared front door for offset/length fields parsed from attacker-controllable forensic images."
+repository = "https://github.com/SecurityRonin/safe-read"
+homepage = "https://github.com/SecurityRonin/safe-read"
+documentation = "https://docs.rs/safe-read"
+readme = "README.md"
+authors = ["Albert Hui <albert.hui@gmail.com>"]
+keywords = ["forensics", "parsing", "bytes", "no-panic"]
+categories = ["parsing", "no-std"]
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"

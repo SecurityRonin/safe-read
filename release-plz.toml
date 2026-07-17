@@ -14,6 +14,14 @@ dependencies_update = false
 # loop). This allowlist makes feat/fix/perf/refactor/doc/revert the only triggers.
 release_commits = "^(feat|fix|perf|refactor|doc|revert)"
 
+[[package]]
+name = "safe-read"
+# Force the crate-prefixed tag `safe-read-v{version}` instead of release-plz's
+# single-crate default `v{version}`. A bare `v0.2.0` tag matches the fleet's `v[0-9]*`
+# binary-release trigger; prefixing it keeps a future binary release.yml from firing on a
+# library publish (the fleet release standard's tag-glob rule).
+git_tag_name = "{{ package }}-v{{ version }}"
+
 [changelog]
 commit_parsers = [
     { message = "^chore\\(release\\):", skip = true },

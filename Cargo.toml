@@ -1,6 +1,6 @@
 [package]
 name = "safe-read"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Low MSRV: a leaf byte-reading crate with no features to gate. A deliberate,
 # CI-verified floor so every fleet reader can depend on it without raising theirs.

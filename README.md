@@ -4,7 +4,7 @@
 [![Docs.rs](https://docs.rs/safe-read/badge.svg)](https://docs.rs/safe-read)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-**Panic-free bounded integer readers over untrusted byte slices** — the shared front door for every offset/length field parsed from an attacker-controllable forensic image, so each reader crate stops re-deriving its own bounds-checked helpers.
+**Fuzzed, panic-free-by-construction bounded integer readers over untrusted byte slices** — the shared front door for every offset/length field parsed from an attacker-controllable forensic image, so each reader crate stops re-deriving its own bounds-checked helpers.
 
 ```rust
 use safe_read::{le_u32, be_u16};

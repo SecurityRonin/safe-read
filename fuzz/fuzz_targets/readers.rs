@@ -1,8 +1,11 @@
 #![no_main]
-//! The whole point of the crate: every reader must return a value (0 when out of
+//! The whole point of the crate: a reader must return a value (0 when out of
 //! range) and NEVER panic, for any byte slice and any offset — including offsets
-//! that would overflow `off + width`. The fuzzer drives arbitrary (slice, offset)
-//! pairs; a panic is a failure.
+//! that would overflow `off + width`. This target drives the six multi-byte readers
+//! (be/le u16/u32/u64), where the width arithmetic and overflow guard live; each
+//! calls its `try_*` twin internally, so those paths are covered transitively. The
+//! single-byte `u8`/`try_u8` readers are a plain `slice.get` with no width to
+//! overflow. The fuzzer drives arbitrary (slice, offset) pairs; a panic is a failure.
 
 use libfuzzer_sys::fuzz_target;
 use safe_read::{be_u16, be_u32, be_u64, le_u16, le_u32, le_u64};

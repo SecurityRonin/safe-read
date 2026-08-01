@@ -27,7 +27,7 @@ assert_eq!(try_bytes::<2>(&[0xaa, 0xbb, 0xcc], 1), Some([0xbb, 0xcc]));
 
 ```toml
 [dependencies]
-safe-read = "0.1"
+safe-read = "0.3"
 ```
 
 ---

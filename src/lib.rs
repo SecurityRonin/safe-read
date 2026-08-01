@@ -136,4 +136,124 @@ mod tests {
         assert_eq!(be_u32(&[1, 2, 3, 4], usize::MAX), 0);
         assert_eq!(try_be_u32(&[1, 2, 3, 4], usize::MAX), None);
     }
+
+    #[test]
+    fn signed_reads_in_range() {
+        assert_eq!(le_i16(&[0x34, 0x12], 0), 0x1234);
+        assert_eq!(be_i16(&[0x12, 0x34], 0), 0x1234);
+        assert_eq!(le_i32(&[0, 1, 0, 0], 0), 256);
+        assert_eq!(be_i32(&[0, 0, 1, 0], 0), 256);
+        assert_eq!(
+            le_i64(&[0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01], 0),
+            0x0102_0304_0506_0708
+        );
+        assert_eq!(
+            be_i64(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], 0),
+            0x0102_0304_0506_0708
+        );
+    }
+
+    #[test]
+    fn signed_reads_honor_offset() {
+        assert_eq!(be_i16(&[0xaa, 0x12, 0x34], 1), 0x1234);
+        assert_eq!(le_i32(&[0xff, 0xff, 0, 1, 0, 0], 2), 256);
+    }
+
+    /// The whole point of the signed readers: a two's-complement bit pattern must come
+    /// back as a negative number, not as its huge unsigned twin.
+    #[test]
+    fn signed_reads_round_trip_negative_values() {
+        assert_eq!(le_i16(&[0xff, 0xff], 0), -1);
+        assert_eq!(be_i16(&[0xff, 0xff], 0), -1);
+        assert_eq!(le_i32(&[0xff, 0xff, 0xff, 0xff], 0), -1);
+        assert_eq!(be_i32(&[0xff, 0xff, 0xff, 0xff], 0), -1);
+        assert_eq!(le_i64(&[0xff; 8], 0), -1);
+        assert_eq!(be_i64(&[0xff; 8], 0), -1);
+
+        // i16::MIN / i32::MIN / i64::MIN — the sign bit alone.
+        assert_eq!(le_i16(&[0x00, 0x80], 0), i16::MIN);
+        assert_eq!(be_i16(&[0x80, 0x00], 0), i16::MIN);
+        assert_eq!(le_i32(&[0x00, 0x00, 0x00, 0x80], 0), i32::MIN);
+        assert_eq!(be_i32(&[0x80, 0x00, 0x00, 0x00], 0), i32::MIN);
+        assert_eq!(le_i64(&[0, 0, 0, 0, 0, 0, 0, 0x80], 0), i64::MIN);
+        assert_eq!(be_i64(&[0x80, 0, 0, 0, 0, 0, 0, 0], 0), i64::MIN);
+
+        // A FILETIME-style "no such time" sentinel and an ordinary negative delta.
+        assert_eq!(
+            le_i64(&[0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], 0),
+            -2
+        );
+        assert_eq!(le_i32(&[0x9c, 0xff, 0xff, 0xff], 0), -100);
+
+        assert_eq!(try_le_i32(&[0xff, 0xff, 0xff, 0xff], 0), Some(-1));
+        assert_eq!(try_be_i64(&[0xff; 8], 0), Some(-1));
+    }
+
+    #[test]
+    fn signed_out_of_range_returns_zero_or_none() {
+        assert_eq!(le_i16(&[1], 0), 0);
+        assert_eq!(be_i16(&[], 0), 0);
+        assert_eq!(le_i32(&[1, 2, 3], 0), 0);
+        assert_eq!(be_i32(&[1, 2, 3, 4], 2), 0);
+        assert_eq!(le_i64(&[1, 2, 3, 4, 5, 6, 7], 0), 0);
+        assert_eq!(be_i64(&[1, 2, 3, 4, 5, 6, 7, 8], 100), 0);
+
+        assert_eq!(try_le_i16(&[1], 0), None);
+        assert_eq!(try_be_i16(&[], 0), None);
+        assert_eq!(try_le_i32(&[1, 2, 3], 0), None);
+        assert_eq!(try_be_i32(&[1, 2, 3, 4], 2), None);
+        assert_eq!(try_le_i64(&[1, 2, 3, 4, 5, 6, 7], 0), None);
+        assert_eq!(try_be_i64(&[1, 2, 3, 4, 5, 6, 7, 8], 100), None);
+
+        // A genuine in-range 0 is still distinguishable from absent.
+        assert_eq!(try_le_i32(&[0, 0, 0, 0], 0), Some(0));
+    }
+
+    #[test]
+    fn signed_offset_overflow_returns_zero() {
+        assert_eq!(le_i16(&[1, 2, 3, 4], usize::MAX), 0);
+        assert_eq!(be_i32(&[1, 2, 3, 4], usize::MAX), 0);
+        assert_eq!(le_i64(&[1, 2, 3, 4], usize::MAX), 0);
+        assert_eq!(try_le_i16(&[1, 2, 3, 4], usize::MAX), None);
+        assert_eq!(try_be_i32(&[1, 2, 3, 4], usize::MAX), None);
+        assert_eq!(try_le_i64(&[1, 2, 3, 4], usize::MAX), None);
+    }
+
+    #[test]
+    fn try_bytes_window_in_range() {
+        let data = [0xde, 0xad, 0xbe, 0xef, 0x01, 0x02];
+        assert_eq!(try_bytes::<4>(&data, 0), Some([0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(try_bytes::<2>(&data, 4), Some([0x01, 0x02]));
+        assert_eq!(try_bytes::<1>(&data, 5), Some([0x02]));
+        assert_eq!(try_bytes::<6>(&data, 0), Some(data));
+        // A zero-width window is in range anywhere up to the end.
+        assert_eq!(try_bytes::<0>(&data, 6), Some([]));
+        assert_eq!(try_bytes::<0>(&[], 0), Some([]));
+        // A 16-byte GUID window — the case the fleet re-derives everywhere.
+        let guid = [
+            0x77, 0x4e, 0xc1, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        assert_eq!(try_bytes::<16>(&guid, 0), Some(guid));
+    }
+
+    #[test]
+    fn try_bytes_out_of_range_returns_none() {
+        let data = [1u8, 2, 3, 4];
+        assert_eq!(try_bytes::<5>(&data, 0), None); // window longer than slice
+        assert_eq!(try_bytes::<4>(&data, 1), None); // window runs past the end
+        assert_eq!(try_bytes::<1>(&data, 4), None); // offset at the end
+        assert_eq!(try_bytes::<1>(&[], 0), None);
+        assert_eq!(try_bytes::<16>(&data, 0), None);
+    }
+
+    /// `off + N` must be a `checked_add`: an unchecked one wraps here and would then
+    /// index a window that looks in range.
+    #[test]
+    fn try_bytes_offset_overflow_returns_none() {
+        let data = [1u8, 2, 3, 4];
+        assert_eq!(try_bytes::<4>(&data, usize::MAX), None);
+        assert_eq!(try_bytes::<16>(&data, usize::MAX - 8), None);
+        assert_eq!(try_bytes::<2>(&data, usize::MAX - 1), None);
+    }
 }

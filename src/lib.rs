@@ -14,11 +14,18 @@
 //! - **`try_le_u32(data, off) -> Option<u32>`** — returns `None` out of range, for the callers
 //!   that must distinguish a genuine `0` field from an absent/truncated one.
 //!
+//! Each width has a signed reader too (`le_i32`, `try_be_i64`, …), for the fields a format
+//! declares signed; and [`try_bytes`] copies out a fixed-width byte window (a GUID, a
+//! signature, a digest) under the same bounds rule.
+//!
 //! ```
-//! use safe_read::{le_u32, be_u16, u8, try_le_u32};
+//! use safe_read::{le_u32, be_u16, u8, try_le_u32, le_i32, try_bytes};
 //! assert_eq!(le_u32(&[0x78, 0x56, 0x34, 0x12], 0), 0x1234_5678);
 //! assert_eq!(be_u16(&[0xaa, 0x12, 0x34], 1), 0x1234);
 //! assert_eq!(u8(&[0xab], 0), 0xab);
+//! // Signed fields come back negative, not as their huge unsigned twin:
+//! assert_eq!(le_i32(&[0xff, 0xff, 0xff, 0xff], 0), -1);
+//! assert_eq!(try_bytes::<2>(&[0xaa, 0xbb, 0xcc], 1), Some([0xbb, 0xcc]));
 //! // Out of range: 0 for the plain readers, None for the `try_` twins:
 //! assert_eq!(le_u32(&[1, 2, 3], 0), 0);
 //! assert_eq!(try_le_u32(&[1, 2, 3], 0), None);
@@ -55,6 +62,37 @@ bounded_reader!(be_u64, try_be_u64, u64, 8, from_be_bytes);
 bounded_reader!(le_u16, try_le_u16, u16, 2, from_le_bytes);
 bounded_reader!(le_u32, try_le_u32, u32, 4, from_le_bytes);
 bounded_reader!(le_u64, try_le_u64, u64, 8, from_le_bytes);
+
+// Signed twins. Two's-complement reinterpretation is the whole difference: a field the
+// format declares signed (a FILETIME delta, a negative record offset, a signed count)
+// read through the unsigned reader comes back as its huge positive twin.
+bounded_reader!(be_i16, try_be_i16, i16, 2, from_be_bytes);
+bounded_reader!(be_i32, try_be_i32, i32, 4, from_be_bytes);
+bounded_reader!(be_i64, try_be_i64, i64, 8, from_be_bytes);
+bounded_reader!(le_i16, try_le_i16, i16, 2, from_le_bytes);
+bounded_reader!(le_i32, try_le_i32, i32, 4, from_le_bytes);
+bounded_reader!(le_i64, try_le_i64, i64, 8, from_le_bytes);
+
+/// Copy the `N`-byte window at `off` into an array; `None` if that window is not fully in
+/// range (too short, offset past EOF, or `off + N` overflowing `usize`). Never panics.
+///
+/// The array flavour of the readers above, for the fixed-width windows that are not
+/// integers — GUIDs, signatures, digests, fixed-size name fields:
+///
+/// ```
+/// use safe_read::try_bytes;
+/// let record = [0xde, 0xad, 0xbe, 0xef, 0x01, 0x02];
+/// assert_eq!(try_bytes::<4>(&record, 0), Some([0xde, 0xad, 0xbe, 0xef]));
+/// assert_eq!(try_bytes::<4>(&record, 3), None); // runs past the end
+/// ```
+#[must_use]
+pub fn try_bytes<const N: usize>(data: &[u8], off: usize) -> Option<[u8; N]> {
+    let end = off.checked_add(N)?;
+    let slice = data.get(off..end)?;
+    let mut buf = [0u8; N];
+    buf.copy_from_slice(slice);
+    Some(buf)
+}
 
 /// Read a single byte at `off`; `None` if `off` is past the end. Never panics.
 #[must_use]

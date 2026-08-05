@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/SecurityRonin/safe-read/compare/safe-read-v0.2.1...safe-read-v0.2.2) - 2026-08-05
+
+### Added
+
+- *(read)* add signed readers and try_bytes window
+
+### Documentation
+
+- *(read)* widen README install caret 0.1 -> 0.3
+
 ## [0.2.1](https://github.com/SecurityRonin/safe-read/compare/safe-read-v0.2.0...safe-read-v0.2.1) - 2026-07-25
 
 ### Documentation

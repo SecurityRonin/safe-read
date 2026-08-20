@@ -4,185 +4,23 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
-env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+permissions:
+  contents: read
 
 jobs:
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - run: cargo test # default features
-      - run: cargo test --all-features # serde JSON output
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@v2 # renovate: pin digest
-        with:
-          tool: cargo-llvm-cov
-      # Every function across the library AND the CLI binary must be covered.
-      # Line % reads below 100 where reader-generic code is monomorphized per
-      # reader type — the function gate is the meaningful invariant.
-      - run: cargo llvm-cov --all-features --fail-under-functions 100 --show-missing-lines
-
-  msrv:
-    name: MSRV (1.75)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@1.75.0
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - run: cargo test --all-features
-
-  deny:
-    name: cargo-deny
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: EmbarkStudios/cargo-deny-action@v2 # renovate: pin digest
-        with:
-          command: check
-
-  # crates.io only gates description + license fields, not the README/LICENSE
-  # files — assert every publishable crate actually packages both.
-  package:
-    name: Package completeness
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-      - name: README + LICENSE packaged in every published crate
-        run: |
-          set -euo pipefail
-          pkgs=$(cargo metadata --no-deps --format-version 1 \
-            | python3 -c "import sys,json;[print(p['name']) for p in json.load(sys.stdin)['packages'] if p.get('publish') != []]")
-          for p in $pkgs; do
-            list=$(cargo package -p "$p" --list)
-            echo "$list" | grep -qx 'README.md' || { echo "::error::$p does not package README.md"; exit 1; }
-            echo "$list" | grep -q '^LICENSE'   || { echo "::error::$p does not package a LICENSE file"; exit 1; }
-            echo "✓ $p packages README.md + LICENSE"
-          done
-
-  fuzz-check:
-    name: Fuzz targets compile (nightly)
-    runs-on: ubuntu-latest
-    # cargo-fuzz builds with the host nightly; warnings in its own deps must not
-    # fail the install, so this job does not deny warnings.
-    env:
-      RUSTFLAGS: ""
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - run: cargo install cargo-fuzz
-      - run: cargo +nightly fuzz check
-
-  secrets:
-    name: Secret Scan (gitleaks)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-      - name: Install gitleaks
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Pinned, never a `latest` API call. The unauthenticated GitHub API is
-          # rate-limited on shared runners, which leaves VERSION empty and 404s
-          # the download -- and `| tar xz` swallows it. Bump deliberately.
-          # renovate: datasource=github-releases depName=gitleaks/gitleaks
-          VERSION=8.30.1
-          # Retried: a one-off network blip on a shared runner should not fail a
-          # job that has nothing to do with the network. Bounded so it cannot
-          # become a hang either.
-          fetch() {
-            local url="$1" out="$2" attempt=1
-            until curl -sSfL --max-time 120 "$url" -o "$out"; do
-              if [ "$attempt" -ge 3 ]; then
-                echo "::error::download failed on all 3 attempts: $url (endpoint unreachable, not a code failure)"
-                return 1
-              fi
-              echo "::warning::download failed (attempt ${attempt}/3), retrying: $url"
-              rm -f "$out"
-              sleep $((attempt * 15))
-              attempt=$((attempt + 1))
-            done
-          }
-          fetch "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" /tmp/gitleaks.tar.gz
-          tar xz -C /tmp -f /tmp/gitleaks.tar.gz gitleaks
-          /tmp/gitleaks version
-      - name: Run gitleaks
-        run: /tmp/gitleaks detect --source .
-  docs:
-    name: Docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609 # v2.7.8
-        with:
-          cache-on-failure: true
-      - run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
-
-  vet:
-    name: Cargo Vet (supply-chain)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-vet
-        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
-        with:
-          tool: cargo-vet
-      - name: Fetch dependencies
-        run: cargo fetch
-      - name: Check supply chain
-        run: cargo vet --locked
+  ci:
+    uses: SecurityRonin/fleet-ci/.github/workflows/rust-ci.yml@0e677831e286bec0fce2613f9958f6af72ed4a2c
+    with:
+      # STRICT, on lines AND functions -- the strongest coverage posture in the
+      # fleet, and the reason `coverage-metric` exists.
+      #
+      # This crate's invariant is that every monomorphized instance is exercised,
+      # not merely that every line is touched by some instantiation. Line
+      # coverage alone cannot see a generic reader instantiated for a type
+      # nobody calls: llvm-cov emits one FN record per instantiation but one DA
+      # record per source line. Measured at 100% on both before migrating, and
+      # checked against the shared gate itself rather than assumed.
+      coverage-gate: strict
+      coverage-metric: both
+      msrv-check: test
